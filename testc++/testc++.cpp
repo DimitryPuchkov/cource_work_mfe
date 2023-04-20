@@ -55,22 +55,22 @@ double mesh::gamma(double r, double z)
 }
 double mesh::f(double r, double z)
 {
-   return z*z*z-6*z;
+   return z * z * z - 6 * z;
 }
 double mesh::ug(double r, double z)
 {
-   return z*z*z;
+   return z * z * z;
 }
 double mesh::tetta(double r, double z)
 {
-   if(z <= 1.1)
+   if (z <= 1.1)
       return -1;
    else
       return 1;
 }
 double mesh::u(double r, double z)
 {
-   return z*z*z;
+   return z * z * z;
 }
 
 
@@ -106,7 +106,7 @@ sparse_sistem::sparse_sistem(mesh &MESH)
 
    dim = MESH.count_r * MESH.count_z;
 
-   tmp = new long[dim]; 
+   tmp = new long[dim];
 
    tmp_n = new long *[dim];
    for (i = 0; i < dim; i++)
@@ -214,7 +214,7 @@ void sparse_sistem::make_slau(mesh &MESH)
    double a11, a12, a21, a22, a31, a32;
    double det;
    double h, sumr;
-   double r[3] = {0, 0, 0}, z[3] = {0, 0, 0}, n[3] = {0, 0, 0};
+   double r[3] = { 0, 0, 0 }, z[3] = { 0, 0, 0 }, n[3] = { 0, 0, 0 };
 
    for (i = 0; i < MESH.count_r - 1; i++)//генерация вкладов с элементов
       for (j = 0; j < MESH.count_z - 1; j++)
@@ -230,15 +230,15 @@ void sparse_sistem::make_slau(mesh &MESH)
          z[1] = MESH.z[j + 1];
          z[2] = MESH.z[j];
 
-         det = (z[1]-z[0])*(r[2]-r[0]) - (z[2]-z[0])*(r[1]-r[0]); // |detD|
-         a11 = (r[1]-r[2])/det;
-         a12 = (z[2]-z[1])/det;
-         a21 = (r[2]-r[0])/det;
-         a22 = (z[0]-z[2])/det;
-         a31 = (r[0]-r[1])/det;
-         a32 = (z[1]-z[0])/det;
+         det = (z[1] - z[0]) * (r[2] - r[0]) - (z[2] - z[0]) * (r[1] - r[0]); // |detD|
+         a11 = (r[1] - r[2]) / det;
+         a12 = (z[2] - z[1]) / det;
+         a21 = (r[2] - r[0]) / det;
+         a22 = (z[0] - z[2]) / det;
+         a31 = (r[0] - r[1]) / det;
+         a32 = (z[1] - z[0]) / det;
 
-         sumr = MESH.lambda() * (r[0]+r[1]+r[2])*fabs(det)/12;
+         sumr = MESH.lambda() * (r[0] + r[1] + r[2]) * fabs(det) / 12;
 
          add(sumr * (a11 * a11 + a12 * a12) + MESH.gamma(r[0], z[0]) * calc_m(1, 1, r, z, det), n[0], n[0]);
 
@@ -247,7 +247,7 @@ void sparse_sistem::make_slau(mesh &MESH)
 
          add(sumr * (a31 * a11 + a32 * a12) + MESH.gamma(r[0], z[0]) * calc_m(3, 1, r, z, det), n[2], n[0]);
          add(sumr * (a31 * a21 + a32 * a22) + MESH.gamma(r[0], z[0]) * calc_m(3, 2, r, z, det), n[2], n[1]);
-         add(sumr * (a31 * a31 + a32 * a32) + MESH.gamma(r[0], z[0])*calc_m(3, 3, r, z, det), n[2], n[2]);
+         add(sumr * (a31 * a31 + a32 * a32) + MESH.gamma(r[0], z[0]) * calc_m(3, 3, r, z, det), n[2], n[2]);
 
          add(calc_b(1, r, z, det, MESH), n[0]);
          add(calc_b(2, r, z, det, MESH), n[1]);
@@ -289,7 +289,7 @@ void sparse_sistem::make_slau(mesh &MESH)
          add(calc_b(3, r, z, det, MESH), n[2]);
 
       }
-  
+
    //////2-е краевое
    // правая граница
    //for (z[0] = z[1] = MESH.z[MESH.count_z - 1], i = 0; i < MESH.count_r - 1; i++)
@@ -333,8 +333,8 @@ void sparse_sistem::make_slau(mesh &MESH)
       boundary1(MESH.count_z * i, MESH.ug(MESH.r[i], MESH.z[0]));
 
    // Правая граница
-   for (i = 1; i < MESH.count_r+1; i++)
-      boundary1(MESH.count_z * i - 1, MESH.ug(MESH.r[i-1], MESH.z[MESH.count_z-1]));
+   for (i = 1; i < MESH.count_r + 1; i++)
+      boundary1(MESH.count_z * i - 1, MESH.ug(MESH.r[i - 1], MESH.z[MESH.count_z - 1]));
 
 
 
@@ -454,7 +454,7 @@ double sparse_sistem::dotproduct(vector<double> *a, vector<double> *b)
 long sparse_sistem::fact(long a)
 {
    long f = 1;
-   for(long i =1; i <= a; i++) f *= i;
+   for (long i = 1; i <= a; i++) f *= i;
    return f;
 }
 void sparse_sistem::MSG(vector<double> *result)
@@ -530,7 +530,7 @@ double sparse_sistem::integrate_L(long nu[], double det)
       znamen += nu[i];
    }
    znamen = fact(znamen);
-   return (chisl*fabs(det))/(znamen*2);
+   return (chisl * fabs(det)) / (znamen * 2);
 }
 double sparse_sistem::calc_m(long i, long j, double r[], double z[], double det)
 {
@@ -542,11 +542,11 @@ double sparse_sistem::calc_m(long i, long j, double r[], double z[], double det)
       nu[0] = 0;
       nu[1] = 0;
       nu[2] = 0;
-      nu[i-1]++;
-      nu[j-1]++;
+      nu[i - 1]++;
+      nu[j - 1]++;
       nu[m]++;
 
-      sum += r[m]*integrate_L(nu, det);
+      sum += r[m] * integrate_L(nu, det);
    }
    return sum;
 }
@@ -554,7 +554,7 @@ double sparse_sistem::calc_b(long i, double r[], double z[], double det, mesh &M
 {
    double sum = 0;
    for (long k = 0; k < 3; k++)
-      sum += MESH.f(r[k], z[k]) * calc_m(i, k+1, r, z, det);
+      sum += MESH.f(r[k], z[k]) * calc_m(i, k + 1, r, z, det);
    return sum;
 }
 
@@ -582,7 +582,7 @@ int main()
       {
          anal[i * MESH.count_z + j] = MESH.u(MESH.r[i], MESH.z[j]);
          raz[i * MESH.count_z + j] = fabs(res[i * MESH.count_z + j] - anal[i * MESH.count_z + j]);
-         out<<scientific << MESH.r[i] << "\t" << MESH.z[j] << "\t" << res[i * MESH.count_z + j] << "\t" << anal[i * MESH.count_z + j] << "\t" << raz[i * MESH.count_z + j] << endl;
+         out << scientific << MESH.r[i] << "\t" << MESH.z[j] << "\t" << res[i * MESH.count_z + j] << "\t" << anal[i * MESH.count_z + j] << "\t" << raz[i * MESH.count_z + j] << endl;
       }
    out << endl << sqrt(SISTEM.dotproduct(&raz, &raz));
 
