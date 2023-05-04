@@ -8,16 +8,17 @@ using namespace std;
 class mesh		//сетка и все параметры задачи
 {
 public:
-   long count_r, count_z;  //количество узлов по r,z
-   double *r, *z;			//массивы координат
+   long count_r, count_z, count_t;  //количество узлов по r,z, t
+   double *r, *z, *t;			//массивы координат и времени
    mesh(string file_name);	//конструктор mesh
    ~mesh();
    double lambda();	//выдают значение лямбда
-   double gamma(double r, double z);
-   double tetta(double r, double z);
-   double f(double r, double z);
-   double ug(double r, double z);
-   double u(double r, double z);
+   //double gamma(double r, double z);
+   double f(double r, double z, double t);
+   double ug(double r, double z, double t);
+   double u(double r, double z, double t);
+   double hi();
+   double sigma();
 };
 
 mesh::mesh(string file_name)
@@ -28,14 +29,17 @@ mesh::mesh(string file_name)
 
    in.open(file_name);
 
-   in >> count_r >> count_z;
+   in >> count_r >> count_z>>count_t;
    r = new double[count_r];
    z = new double[count_z];
+   t = new double[count_t];
 
    for (i = 0; i < count_r; i++)
       in >> r[i];
    for (i = 0; i < count_z; i++)
       in >> z[i];
+   for (i = 0; i < count_t; i++)
+      in >> t[i];
 
    in.close();
 }
@@ -49,30 +53,30 @@ double mesh::lambda()
 {
    return 1.0;
 }
-double mesh::gamma(double r, double z)
+//double mesh::gamma(double r, double z)
+//{
+//   return 1.0;
+//}
+double mesh::f(double r, double z, double t)
+{
+   return 0;
+}  
+double mesh::ug(double r, double z, double t)
+{
+   return z;
+}
+double mesh::u(double r, double z, double t)
+{
+   return z;
+}
+double mesh::hi()
 {
    return 1.0;
 }
-double mesh::f(double r, double z)
+double mesh::sigma()
 {
-   return z * z * z - 6 * z;
+   return 1.0;
 }
-double mesh::ug(double r, double z)
-{
-   return z * z * z;
-}
-double mesh::tetta(double r, double z)
-{
-   if (z <= 1.1)
-      return -1;
-   else
-      return 1;
-}
-double mesh::u(double r, double z)
-{
-   return z * z * z;
-}
-
 
 class sparse_sistem  //разряженная система
 {
@@ -84,7 +88,7 @@ private:
 public:
    sparse_sistem(class mesh &MESH); //конструктор
    ~sparse_sistem();
-   void make_slau(class mesh &MESH);  //сборка матрицы
+   void make_slau(class mesh &MESH, vector<double> qj_2, vector<double> qj_1, double tj_2, double tj_1, double tj);  //сборка матрицы
    void add(double value, long i, long j); //вклад в матрицу
    void add(double value, long i);   //вклад в вектор
    void boundary1(long i, double value);  //учёт первого краевого с симметризацией матрицы
@@ -95,7 +99,7 @@ public:
    long fact(long a); // a!
    double integrate_L(long nu[], double det); // вычисляет интеграл по базисным функциям nu - массив с степенями
    double calc_m(long i, long j, double r[], double z[], double det);
-   double calc_b(long i, double r[], double z[], double det, mesh &MESH);
+   double calc_b(long i, double r[], double z[], double det, double tj, double qj_2[], double qj_1[], double tMhi_2, double tMhi_1, double tMsig_2, double tMsig_1, mesh &MESH);
 };
 sparse_sistem::sparse_sistem(mesh &MESH)
 {
@@ -208,13 +212,27 @@ sparse_sistem::~sparse_sistem()
    gl.clear();
    b.clear();
 }
-void sparse_sistem::make_slau(mesh &MESH)
+void sparse_sistem::make_slau(mesh &MESH, vector<double> qj_2, vector<double> qj_1, double tj_2, double tj_1, double tj)
 {
    long i, j;
    double a11, a12, a21, a22, a31, a32;
    double det;
    double h, sumr;
-   double r[3] = { 0, 0, 0 }, z[3] = { 0, 0, 0 }, n[3] = { 0, 0, 0 };
+   double b;
+   double r[3] = { 0, 0, 0 }, z[3] = { 0, 0, 0 }, n[3] = { 0, 0, 0 }, qj1_loc[3] = {0, 0, 0}, qj2_loc[3]={0, 0, 0};
+   double dt, dt0, dt1, tMhi, tMhi_1, tMhi_2, tMsig, tMsig_1, tMsig_2, M_coef;
+
+   dt = tj-tj_2;
+   dt1 = tj_1 - tj_2;
+   dt0 = tj-tj_1;
+   tMhi = 2 / (dt * dt0);
+   tMhi_1 = 2/(dt1*dt0);
+   tMhi_2 = -2/(dt1*dt);
+   tMsig = (dt + dt0) / (dt * dt0);
+   tMsig_1 = dt/(dt1*dt0);
+   tMsig_2 = -dt0/(dt*dt1);
+   // For M in left part
+   M_coef = (tMhi * MESH.hi() + tMsig * MESH.sigma());
 
    for (i = 0; i < MESH.count_r - 1; i++)//генерация вкладов с элементов
       for (j = 0; j < MESH.count_z - 1; j++)
@@ -230,6 +248,13 @@ void sparse_sistem::make_slau(mesh &MESH)
          z[1] = MESH.z[j + 1];
          z[2] = MESH.z[j];
 
+         qj1_loc[0] = qj_1[n[0]];
+         qj1_loc[1] = qj_1[n[1]];
+         qj1_loc[2] = qj_1[n[2]];
+         qj2_loc[0] = qj_2[n[0]];
+         qj2_loc[1] = qj_2[n[1]];
+         qj2_loc[2] = qj_2[n[2]];
+
          det = (z[1] - z[0]) * (r[2] - r[0]) - (z[2] - z[0]) * (r[1] - r[0]); // |detD|
          a11 = (r[1] - r[2]) / det;
          a12 = (z[2] - z[1]) / det;
@@ -239,19 +264,19 @@ void sparse_sistem::make_slau(mesh &MESH)
          a32 = (z[1] - z[0]) / det;
 
          sumr = MESH.lambda() * (r[0] + r[1] + r[2]) * fabs(det) / 12;
+         
+         add(sumr * (a11 * a11 + a12 * a12) + M_coef * calc_m(1, 1, r, z, det), n[0], n[0]);
 
-         add(sumr * (a11 * a11 + a12 * a12) + MESH.gamma(r[0], z[0]) * calc_m(1, 1, r, z, det), n[0], n[0]);
+         add(sumr * (a11 * a21 + a22 * a12) + M_coef * calc_m(2, 1, r, z, det), n[1], n[0]);
+         add(sumr * (a21 * a21 + a22 * a22) + M_coef * calc_m(2, 2, r, z, det), n[1], n[1]);
 
-         add(sumr * (a11 * a21 + a22 * a12) + MESH.gamma(r[0], z[0]) * calc_m(2, 1, r, z, det), n[1], n[0]);
-         add(sumr * (a21 * a21 + a22 * a22) + MESH.gamma(r[0], z[0]) * calc_m(2, 2, r, z, det), n[1], n[1]);
+         add(sumr * (a31 * a11 + a32 * a12) + M_coef * calc_m(3, 1, r, z, det), n[2], n[0]);
+         add(sumr * (a31 * a21 + a32 * a22) + M_coef * calc_m(3, 2, r, z, det), n[2], n[1]);
+         add(sumr * (a31 * a31 + a32 * a32) + M_coef * calc_m(3, 3, r, z, det), n[2], n[2]);
 
-         add(sumr * (a31 * a11 + a32 * a12) + MESH.gamma(r[0], z[0]) * calc_m(3, 1, r, z, det), n[2], n[0]);
-         add(sumr * (a31 * a21 + a32 * a22) + MESH.gamma(r[0], z[0]) * calc_m(3, 2, r, z, det), n[2], n[1]);
-         add(sumr * (a31 * a31 + a32 * a32) + MESH.gamma(r[0], z[0]) * calc_m(3, 3, r, z, det), n[2], n[2]);
-
-         add(calc_b(1, r, z, det, MESH), n[0]);
-         add(calc_b(2, r, z, det, MESH), n[1]);
-         add(calc_b(3, r, z, det, MESH), n[2]);
+         add(calc_b(1, r, z, det, tj, qj2_loc, qj1_loc, tMhi_2, tMhi_1, tMsig_2, tMsig_1, MESH), n[0]);
+         add(calc_b(2, r, z, det, tj, qj2_loc, qj1_loc, tMhi_2, tMhi_1, tMsig_2, tMsig_1, MESH), n[1]);
+         add(calc_b(3, r, z, det, tj, qj2_loc, qj1_loc, tMhi_2, tMhi_1, tMsig_2, tMsig_1, MESH), n[2]);
 
 
 
@@ -275,66 +300,40 @@ void sparse_sistem::make_slau(mesh &MESH)
          a32 = (z[1] - z[0]) / det;
          sumr = MESH.lambda() * (r[0] + r[1] + r[2]) * fabs(det) / 12;
 
-         add(sumr * (a11 * a11 + a12 * a12) + MESH.gamma(r[0], z[0]) * calc_m(1, 1, r, z, det), n[0], n[0]);
+         add(sumr * (a11 * a11 + a12 * a12) + M_coef * calc_m(1, 1, r, z, det), n[0], n[0]);
 
-         add(sumr * (a11 * a21 + a22 * a12) + MESH.gamma(r[0], z[0]) * calc_m(2, 1, r, z, det), n[1], n[0]);
-         add(sumr * (a21 * a21 + a22 * a22) + MESH.gamma(r[0], z[0]) * calc_m(2, 2, r, z, det), n[1], n[1]);
+         add(sumr * (a11 * a21 + a22 * a12) + M_coef * calc_m(2, 1, r, z, det), n[1], n[0]);
+         add(sumr * (a21 * a21 + a22 * a22) + M_coef * calc_m(2, 2, r, z, det), n[1], n[1]);
 
-         add(sumr * (a31 * a11 + a32 * a12) + MESH.gamma(r[0], z[0]) * calc_m(3, 1, r, z, det), n[2], n[0]);
-         add(sumr * (a31 * a21 + a32 * a22) + MESH.gamma(r[0], z[0]) * calc_m(3, 2, r, z, det), n[2], n[1]);
-         add(sumr * (a31 * a31 + a32 * a32) + MESH.gamma(r[0], z[0]) * calc_m(3, 3, r, z, det), n[2], n[2]);
+         add(sumr * (a31 * a11 + a32 * a12) + M_coef * calc_m(3, 1, r, z, det), n[2], n[0]);
+         add(sumr * (a31 * a21 + a32 * a22) + M_coef * calc_m(3, 2, r, z, det), n[2], n[1]);
+         add(sumr * (a31 * a31 + a32 * a32) + M_coef * calc_m(3, 3, r, z, det), n[2], n[2]);
 
-         add(calc_b(1, r, z, det, MESH), n[0]);
-         add(calc_b(2, r, z, det, MESH), n[1]);
-         add(calc_b(3, r, z, det, MESH), n[2]);
+
+         //правая часть
+         add(calc_b(1, r, z, det, tj, qj2_loc, qj1_loc, tMhi_2, tMhi_1, tMsig_2, tMsig_1, MESH), n[0]);
+         add(calc_b(2, r, z, det, tj, qj2_loc, qj1_loc, tMhi_2, tMhi_1, tMsig_2, tMsig_1, MESH), n[1]);
+         add(calc_b(3, r, z, det, tj, qj2_loc, qj1_loc, tMhi_2, tMhi_1, tMsig_2, tMsig_1, MESH), n[2]);
 
       }
-
-   //////2-е краевое
-   // правая граница
-   //for (z[0] = z[1] = MESH.z[MESH.count_z - 1], i = 0; i < MESH.count_r - 1; i++)
-   //{
-   //   n[0] = MESH.count_z * (i + 1) - 1;
-   //   n[1] = n[0] + MESH.count_z;
-   //   r[0] = MESH.r[i];
-   //   r[1] = MESH.r[i + 1];
-   //   h = sqrt(pow(r[0] - r[1], 2.0) + pow(z[0] - z[1], 2.0))/12.0;
-
-
-   //   add(h * (MESH.tetta(r[0], z[0]) * (3.0 * r[0] + r[1]) + MESH.tetta(r[1], z[1]) * (r[0] + r[1])), n[0]);
-   //   add(h * (MESH.tetta(r[0], z[0]) * (r[0] + r[1]) + MESH.tetta(r[1], z[1]) * (r[0] + 3.0 * r[1])), n[1]);
-   //}
-   ////левая граница
-   //for (z[0] = z[1] = MESH.z[0], i = 0; i < MESH.count_r - 1; i++)
-   //{
-   //   n[0] = MESH.count_z * i;
-   //   n[1] = n[0] + MESH.count_z;
-   //   r[0] = MESH.r[i];
-   //   r[1] = MESH.r[i + 1];
-   //   h = sqrt(pow(r[0] - r[1], 2.0) + pow(z[0] - z[1], 2.0));
-
-   //   add(h *(MESH.tetta(r[0], z[0]) *(3.0 * r[0] + r[1]) + MESH.tetta(r[1], z[1]) * (r[0] + r[1])), n[0]);
-   //   add(h *(MESH.tetta(r[0], z[0]) *(r[0] + r[1]) + MESH.tetta(r[1], z[1]) * (r[0] + 3.0 * r[1])), n[1]);
-   //}
-
 
 
    //Учёт первого краевого
    // Верхняя граница
    for (i = 0; i < MESH.count_z; i++)
-      boundary1((MESH.count_r - 1) * (MESH.count_z) + i, MESH.ug(MESH.r[MESH.count_r - 1], MESH.z[i]));
+      boundary1((MESH.count_r - 1) * (MESH.count_z) + i, MESH.ug(MESH.r[MESH.count_r - 1], MESH.z[i], tj));
 
    // Нижняя граница
    for (i = 0; i < MESH.count_z; i++)
-      boundary1(i, MESH.ug(MESH.r[0], MESH.z[i]));
+      boundary1(i, MESH.ug(MESH.r[0], MESH.z[i], tj));
 
    //Левая граница
    for (i = 0; i < MESH.count_r; i++)
-      boundary1(MESH.count_z * i, MESH.ug(MESH.r[i], MESH.z[0]));
+      boundary1(MESH.count_z * i, MESH.ug(MESH.r[i], MESH.z[0], tj));
 
    // Правая граница
    for (i = 1; i < MESH.count_r + 1; i++)
-      boundary1(MESH.count_z * i - 1, MESH.ug(MESH.r[i - 1], MESH.z[MESH.count_z - 1]));
+      boundary1(MESH.count_z * i - 1, MESH.ug(MESH.r[i - 1], MESH.z[MESH.count_z - 1], tj));
 
 
 
@@ -464,7 +463,7 @@ void sparse_sistem::MSG(vector<double> *result)
    //double *x, *r, *p, *Ap, *Dr;
    vector<double> x, r, p, Ap, Dr;
    eps = 1.e-9;
-   max_iter = 200;
+   max_iter = 20000;
 
    x.resize(dim);
    r.resize(dim);
@@ -550,11 +549,30 @@ double sparse_sistem::calc_m(long i, long j, double r[], double z[], double det)
    }
    return sum;
 }
-double sparse_sistem::calc_b(long i, double r[], double z[], double det, mesh &MESH)
+double sparse_sistem::calc_b(long i, double r[], double z[], double det, double tj, double qj_2[], double qj_1[], double tMhi_2, double tMhi_1, double tMsig_2, double tMsig_1, mesh &MESH)
 {
    double sum = 0;
+
+
+   //bi
    for (long k = 0; k < 3; k++)
-      sum += MESH.f(r[k], z[k]) * calc_m(i, k + 1, r, z, det);
+      sum += MESH.f(r[k], z[k], tj) * calc_m(i, k + 1, r, z, det);
+
+   // Mhi qj_2
+   for (long k = 0; k < 3; k++)
+      sum += MESH.hi() * tMhi_2 * qj_2[k] * calc_m(i, k + 1, r, z, det);
+
+   // Msig qj_2
+   for (long k = 0; k < 3; k++)
+      sum += MESH.sigma() * tMsig_2 * qj_2[k] * calc_m(i, k + 1, r, z, det);
+
+   // Mhi qj_1
+   for (long k = 0; k < 3; k++)
+      sum += MESH.hi() * tMhi_1 * qj_1[k] * calc_m(i, k + 1, r, z, det);
+
+   // Msig qj_1
+   for (long k = 0; k < 3; k++)
+      sum += MESH.sigma() * tMsig_1 * qj_1[k] * calc_m(i, k + 1, r, z, det);
    return sum;
 }
 
@@ -562,29 +580,59 @@ double sparse_sistem::calc_b(long i, double r[], double z[], double det, mesh &M
 int main()
 {
    long i, j;
-   vector<double> res, anal, raz;
+   double tj_2, tj_1, tj;
+   vector<double> res, anal, raz, qj_2, qj_1;
    class mesh MESH("mesh.txt");
    class sparse_sistem SISTEM(MESH);
 
    res.resize(MESH.count_r * MESH.count_z);
    anal.resize(MESH.count_r * MESH.count_z);
    raz.resize(MESH.count_r * MESH.count_z);
+   qj_2.resize(MESH.count_r * MESH.count_z);
+   qj_1.resize(MESH.count_r * MESH.count_z);
 
-   SISTEM.make_slau(MESH);
-   SISTEM.MSG(&res);
+   //for (int i=0; i < qj_2.size(); i++)
+   //{
+   //   qj_1[i] = MESH.u(MESH.r[i], MESH.z[j], MESH.t[0]);
+   //   qj_2[i] = MESH.u(MESH.r[i], MESH.z[j], MESH.t[1]);
+   //}
+   for(int r = 0; r<MESH.count_r; r++)
+      for (int z = 0; z < MESH.count_z; z++)
+      {
+         qj_1[r*MESH.count_z+z] = MESH.u(MESH.r[r], MESH.z[z], MESH.t[0]);
+         qj_2[r*MESH.count_z+z] = MESH.u(MESH.r[r], MESH.z[z], MESH.t[1]);
+      }
 
    ofstream out;
    out.open("res.xls");
+   out <<"t\t" <<"r\t" << "z\t" << "u(r,z)\t" << "u*(r,z)\t" << "(u*-u)(r,z)\n";
 
-   out << "r\t" << "z\t" << "u*(r,z)\t" << "u(r,z)\t" << "(u*-u)(r,z)\n";
-   for (i = 0; i < MESH.count_r; i++)
-      for (j = 0; j < MESH.count_z; j++)
-      {
-         anal[i * MESH.count_z + j] = MESH.u(MESH.r[i], MESH.z[j]);
-         raz[i * MESH.count_z + j] = fabs(res[i * MESH.count_z + j] - anal[i * MESH.count_z + j]);
-         out << scientific << MESH.r[i] << "\t" << MESH.z[j] << "\t" << res[i * MESH.count_z + j] << "\t" << anal[i * MESH.count_z + j] << "\t" << raz[i * MESH.count_z + j] << endl;
-      }
-   out << endl << sqrt(SISTEM.dotproduct(&raz, &raz));
+   for (int j = 2; j < MESH.count_t; j++)
+   {
+      tj_2 = MESH.t[j-2];
+      tj_1 = MESH.t[j-1];
+      tj = MESH.t[j];
+      SISTEM.make_slau(MESH, qj_2, qj_1, tj_2, tj_1, tj);
+      SISTEM.MSG(&res);
+      qj_2 = qj_1;
+      qj_1 = res;
+
+      for (int r = 0; r < MESH.count_r; r++)
+         for (int z = 0; z < MESH.count_z; z++)
+         {
+            anal[r * MESH.count_z + z] = MESH.u(MESH.r[r], MESH.z[z], tj);
+            raz[r * MESH.count_z + z] = fabs(res[r * MESH.count_z + z] - anal[r * MESH.count_z + z]);
+            out << scientific << tj<<"\t" << MESH.r[r] << "\t" << MESH.z[z] << "\t" << res[r * MESH.count_z + z] << "\t" << anal[r * MESH.count_z + z] << "\t" << raz[r * MESH.count_z + z] << endl;
+         }
+      out << endl<<"ERROR: \t" << sqrt(SISTEM.dotproduct(&raz, &raz)) << endl;
+   }
+   
+   
+
+   
+
+   
+   
 
    out.close();
    res.clear();
